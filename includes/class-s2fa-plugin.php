@@ -6,6 +6,7 @@ final class S2FA_Plugin {
     const META_ENABLED = '_s2fa_enabled';
     const META_SECRET = '_s2fa_secret';
     const META_RECOVERY = '_s2fa_recovery';
+    const META_LANG = '_s2fa_lang';
     const COOKIE = 's2fa_pending';
 
     public static function instance() {
@@ -20,6 +21,7 @@ final class S2FA_Plugin {
         add_action( 'admin_post_s2fa_save', array( $this, 'save_settings' ) );
         add_action( 'admin_post_s2fa_disable', array( $this, 'disable_2fa' ) );
         add_action( 'admin_post_s2fa_regenerate', array( $this, 'regenerate_codes' ) );
+        add_action( 'admin_post_s2fa_language', array( $this, 'save_language' ) );
         add_filter( 'authenticate', array( $this, 'intercept_login' ), 99, 3 );
         add_action( 'login_form_s2fa_verify', array( $this, 'render_verify_screen' ) );
         add_action( 'login_enqueue_scripts', array( $this, 'login_assets' ) );
@@ -30,9 +32,10 @@ final class S2FA_Plugin {
     }
 
     public function admin_menu() {
+        $fa = 'fa' === $this->preferred_lang();
         add_menu_page(
-            __( 'Two-Factor Authentication', 'do-marhalei' ),
-            __( 'Two-Factor', 'do-marhalei' ),
+            $fa ? 'تأیید هویت دو مرحله‌ای' : 'Two-Factor Authentication',
+            $fa ? 'دو مرحله‌ای' : 'Two-Factor',
             'read',
             'do-marhalei',
             array( $this, 'settings_page' ),
@@ -44,13 +47,32 @@ final class S2FA_Plugin {
     public function admin_assets( $hook ) {
         if ( 'toplevel_page_do-marhalei' !== $hook ) { return; }
         wp_enqueue_style( 's2fa-admin', S2FA_URL . 'assets/css/admin.css', array(), S2FA_VERSION );
-        wp_enqueue_script( 's2fa-admin', S2FA_URL . 'assets/js/admin.js', array(), S2FA_VERSION, true );
+        wp_enqueue_script( 's2fa-qrcode', S2FA_URL . 'assets/vendor/qrcode.min.js', array(), '1.0.0', true );
+        wp_enqueue_script( 's2fa-admin', S2FA_URL . 'assets/js/admin.js', array( 's2fa-qrcode' ), S2FA_VERSION, true );
     }
 
     public function login_assets() {
         if ( isset( $_GET['action'] ) && 's2fa_verify' === sanitize_key( wp_unslash( $_GET['action'] ) ) ) {
             wp_enqueue_style( 's2fa-login', S2FA_URL . 'assets/css/login.css', array(), S2FA_VERSION );
         }
+    }
+
+    private function preferred_lang( $user_id = 0 ) {
+        $user_id = $user_id ? absint( $user_id ) : get_current_user_id();
+        $lang = $user_id ? (string) get_user_meta( $user_id, self::META_LANG, true ) : '';
+        if ( in_array( $lang, array( 'fa', 'en' ), true ) ) { return $lang; }
+        return 0 === strpos( determine_locale(), 'fa' ) ? 'fa' : 'en';
+    }
+
+    private function apply_user_locale( $user_id = 0 ) {
+        $lang = $this->preferred_lang( $user_id );
+        switch_to_locale( 'fa' === $lang ? 'fa_IR' : 'en_US' );
+        return $lang;
+    }
+
+    private function ui( $en, $fa, $lang = '' ) {
+        $lang = $lang ? $lang : $this->preferred_lang();
+        return 'fa' === $lang ? $fa : $en;
     }
 
     private function current_data() {
@@ -70,10 +92,11 @@ final class S2FA_Plugin {
     public function settings_page() {
         if ( ! current_user_can( 'read' ) ) { wp_die( esc_html__( 'You do not have permission to access this page.', 'do-marhalei' ) ); }
         $user = wp_get_current_user();
+        $lang = $this->apply_user_locale( $user->ID );
         $data = $this->current_data();
         $issuer = wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES );
         $uri = S2FA_TOTP::provisioning_uri( $data['secret'], $user->user_email, $issuer );
-        $rtl = is_rtl() ? ' s2fa-rtl' : '';
+        $rtl = 'fa' === $lang ? ' s2fa-rtl' : '';
         ?>
         <div class="wrap s2fa-wrap<?php echo esc_attr( $rtl ); ?>">
             <div class="s2fa-shell">
@@ -83,6 +106,15 @@ final class S2FA_Plugin {
                         <h1><?php esc_html_e( 'Two-Factor Authentication', 'do-marhalei' ); ?></h1>
                         <p><?php esc_html_e( 'Add an extra verification step to protect your WordPress account.', 'do-marhalei' ); ?></p>
                     </div>
+                    <form class="s2fa-language" method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+                        <input type="hidden" name="action" value="s2fa_language">
+                        <?php wp_nonce_field( 's2fa_language', 's2fa_nonce' ); ?>
+                        <label for="s2fa-lang"><?php echo esc_html( $this->ui( 'Language', 'زبان', $lang ) ); ?></label>
+                        <select id="s2fa-lang" name="s2fa_lang" onchange="this.form.submit()">
+                            <option value="fa" <?php selected( $lang, 'fa' ); ?>>فارسی</option>
+                            <option value="en" <?php selected( $lang, 'en' ); ?>>English</option>
+                        </select>
+                    </form>
                     <span class="s2fa-status <?php echo $data['enabled'] ? 'is-on' : 'is-off'; ?>">
                         <?php echo $data['enabled'] ? esc_html__( 'Active', 'do-marhalei' ) : esc_html__( 'Inactive', 'do-marhalei' ); ?>
                     </span>
@@ -96,6 +128,13 @@ final class S2FA_Plugin {
                     <section class="s2fa-card">
                         <div class="s2fa-step"><span>1</span><div><h2><?php esc_html_e( 'Connect authenticator app', 'do-marhalei' ); ?></h2><p><?php esc_html_e( 'Add an account manually in your authenticator app using the setup key below.', 'do-marhalei' ); ?></p></div></div>
                         <div class="s2fa-uri-note"><?php esc_html_e( 'Account', 'do-marhalei' ); ?>: <strong><?php echo esc_html( $user->user_email ); ?></strong><br><?php esc_html_e( 'Issuer', 'do-marhalei' ); ?>: <strong><?php echo esc_html( $issuer ); ?></strong></div>
+                        <div class="s2fa-qr-wrap">
+                            <div id="s2fa-qrcode" class="s2fa-qrcode" data-uri="<?php echo esc_attr( $uri ); ?>"></div>
+                            <div class="s2fa-qr-copy">
+                                <strong><?php echo esc_html( $this->ui( 'Scan QR code', 'اسکن QR Code', $lang ) ); ?></strong>
+                                <span><?php echo esc_html( $this->ui( 'Scan with Google Authenticator, Microsoft Authenticator, Authy, 1Password or any TOTP app.', 'با Google Authenticator، Microsoft Authenticator، Authy، 1Password یا هر برنامه TOTP اسکن کنید.', $lang ) ); ?></span>
+                            </div>
+                        </div>
                         <label class="s2fa-label" for="s2fa-secret"><?php esc_html_e( 'Setup key', 'do-marhalei' ); ?></label>
                         <div class="s2fa-secret-row"><code id="s2fa-secret"><?php echo esc_html( $data['secret'] ); ?></code><button type="button" class="button" data-copy="#s2fa-secret"><?php esc_html_e( 'Copy', 'do-marhalei' ); ?></button></div>
                     </section>
@@ -165,6 +204,16 @@ final class S2FA_Plugin {
         return isset( $map[$key] ) ? $map[$key] : '';
     }
 
+    public function save_language() {
+        if ( ! is_user_logged_in() || ! current_user_can( 'read' ) ) { wp_die( 'Unauthorized request.' ); }
+        check_admin_referer( 's2fa_language', 's2fa_nonce' );
+        $lang = isset( $_POST['s2fa_lang'] ) ? sanitize_key( wp_unslash( $_POST['s2fa_lang'] ) ) : 'en';
+        if ( ! in_array( $lang, array( 'fa', 'en' ), true ) ) { $lang = 'en'; }
+        update_user_meta( get_current_user_id(), self::META_LANG, $lang );
+        wp_safe_redirect( add_query_arg( 'page', 'do-marhalei', admin_url( 'admin.php' ) ) );
+        exit;
+    }
+
     public function save_settings() {
         if ( ! is_user_logged_in() || ! current_user_can( 'read' ) ) { wp_die( esc_html__( 'Unauthorized request.', 'do-marhalei' ) ); }
         check_admin_referer( 's2fa_save', 's2fa_nonce' );
@@ -227,6 +276,9 @@ final class S2FA_Plugin {
         $key = $token ? 's2fa_' . hash( 'sha256', $token ) : '';
         $pending = $key ? get_transient( $key ) : false;
         $error = '';
+        if ( $pending && ! empty( $pending['user_id'] ) ) {
+            $this->apply_user_locale( absint( $pending['user_id'] ) );
+        }
 
         if ( ! $pending || empty( $pending['user_id'] ) ) {
             $error = __( 'This verification session has expired. Please sign in again.', 'do-marhalei' );
