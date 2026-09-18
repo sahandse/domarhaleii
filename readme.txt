@@ -4,7 +4,7 @@ Tags: two factor, 2fa, totp, security, authenticator
 Requires at least: 6.5
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.0.4
+Stable tag: 1.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -17,6 +17,8 @@ Developer: Sahand Rezvan (سهند رضوان)
 Telegram: https://t.me/sahandse
 
 Features:
+* Offline QR code setup generated locally in the browser.
+* Built-in Persian / English language selector saved per user.
 * TOTP compatible with common authenticator apps.
 * Manual setup key compatible with standard TOTP authenticator apps.
 * One-time recovery codes.
@@ -40,6 +42,12 @@ Any standard TOTP application should work, including Google Authenticator, Micro
 No. TOTP verification is performed locally on your WordPress installation.
 
 == Changelog ==
+= 1.1.0 =
+* Added local QR code generation for TOTP setup without sending the secret to external services.
+* Added a Persian / English language selector in the admin panel.
+* Saved language preference separately for each WordPress user.
+* Applied the preferred language to the second-step login screen.
+
 = 1.0.3 =
 * Changed the official plugin name to Two-Step Authentication for WordPress.org compatibility.
 * Kept the Persian name in the localized interface.
