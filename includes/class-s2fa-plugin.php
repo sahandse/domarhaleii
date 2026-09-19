@@ -56,7 +56,10 @@ final class S2FA_Plugin {
     }
 
     public function admin_assets( $hook ) {
-        if ( 'toplevel_page_do-marhalei' !== $hook ) { return; }
+        $page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : '';
+        $valid_hooks = array( 'toplevel_page_do-marhalei', 's-store_page_do-marhalei', 'admin_page_do-marhalei' );
+        if ( 'do-marhalei' !== $page && ! in_array( $hook, $valid_hooks, true ) ) { return; }
+
         wp_enqueue_style( 's2fa-admin', S2FA_URL . 'assets/css/admin.css', array(), S2FA_VERSION );
         wp_enqueue_script( 's2fa-qrcode', S2FA_URL . 'assets/vendor/qrcode.min.js', array(), '1.0.0', true );
         wp_enqueue_script( 's2fa-admin', S2FA_URL . 'assets/js/admin.js', array( 's2fa-qrcode' ), S2FA_VERSION, true );
