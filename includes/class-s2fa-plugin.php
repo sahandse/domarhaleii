@@ -33,6 +33,17 @@ final class S2FA_Plugin {
 
     public function admin_menu() {
         $fa = 'fa' === $this->preferred_lang();
+        if ( function_exists( 's_store_register_submenu' ) ) {
+            s_store_register_submenu(
+                'do-marhalei',
+                $fa ? 'دو مرحله‌ای' : 'Two-Factor',
+                array( $this, 'settings_page' ),
+                'read',
+                $fa ? 'تأیید هویت دو مرحله‌ای' : 'Two-Factor Authentication'
+            );
+            return;
+        }
+
         add_menu_page(
             $fa ? 'تأیید هویت دو مرحله‌ای' : 'Two-Factor Authentication',
             $fa ? 'دو مرحله‌ای' : 'Two-Factor',
