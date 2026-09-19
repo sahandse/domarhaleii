@@ -1,0 +1,65 @@
+name: Build Two-Step Installable ZIP
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'domarhaleii.php'
+      - 'includes/**'
+      - 'assets/**'
+      - 'languages/**'
+      - 'readme.txt'
+      - 'uninstall.php'
+      - '.github/workflows/build-release.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(grep 'Version:' domarhaleii.php | head -1 | sed 's/.*Version:[[:space:]]*//')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: PHP syntax check
+        run: |
+          php -l domarhaleii.php
+          php -l includes/class-s2fa-plugin.php
+          php -l includes/class-s2fa-totp.php
+
+      - name: Build ZIP
+        shell: bash
+        run: |
+          rm -rf dist build
+          mkdir -p dist build/domarhaleii
+          cp domarhaleii.php readme.txt uninstall.php build/domarhaleii/
+          cp -R includes assets languages build/domarhaleii/
+          cd build
+          zip -qr ../dist/domarhaleii.zip domarhaleii
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: domarhaleii-v${{ steps.version.outputs.version }}
+          path: dist/domarhaleii.zip
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          TAG="domarhaleii-v${VERSION}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/domarhaleii.zip --clobber
+          else
+            gh release create "$TAG" dist/domarhaleii.zip --title "Two-Step Authentication v${VERSION}" --notes "Installable WordPress ZIP for Two-Step Authentication v${VERSION}."
+          fi
